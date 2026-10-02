@@ -12,6 +12,8 @@ import {
   dynamoCost,
   furnaceCost,
   initialState,
+  nanobotCost,
+  singularityCost,
   prestigeCost,
   recyclerCost,
   resonatorCost,
@@ -58,6 +60,8 @@ function loadSession(): LoadedSession {
       dynamoLevel: saved.dynamoLevel ?? 0,
       arcFurnaceLevel: saved.arcFurnaceLevel ?? 0,
       quantumLevel: saved.quantumLevel ?? 0,
+      nanobotLevel: saved.nanobotLevel ?? 0,
+      singularityLevel: saved.singularityLevel ?? 0,
     };
 
     const offlineSeconds = getOfflineSeconds(previousState);
@@ -250,6 +254,28 @@ export default function App() {
     }));
   }
 
+  function buyNanobot() {
+    const cost = nanobotCost(game.nanobotLevel);
+    if (game.cores < cost) return;
+
+    setGame((current) => ({
+      ...current,
+      cores: current.cores - cost,
+      nanobotLevel: current.nanobotLevel + 1,
+    }));
+  }
+
+  function buySingularity() {
+    const cost = singularityCost(game.singularityLevel);
+    if (game.cores < cost) return;
+
+    setGame((current) => ({
+      ...current,
+      cores: current.cores - cost,
+      singularityLevel: current.singularityLevel + 1,
+    }));
+  }
+
   function buyCoreSynth() {
     const cost = coreSynthCost(game.coreSynthLevel);
     if (!coreSynthUnlocked || game.alloy < cost) return;
@@ -434,6 +460,24 @@ export default function App() {
             currency="Neon Cores"
             disabled={game.cores < quantumCost(game.quantumLevel)}
             onClick={buyQuantum}
+          />
+
+          <Upgrade
+            title="Nanobot Fabricator"
+            subtitle={`Level ${game.nanobotLevel} · +15% all production`}
+            cost={nanobotCost(game.nanobotLevel)}
+            currency="Neon Cores"
+            disabled={game.cores < nanobotCost(game.nanobotLevel)}
+            onClick={buyNanobot}
+          />
+
+          <Upgrade
+            title="Singularity Engine"
+            subtitle={`Level ${game.singularityLevel} · +30% all production`}
+            cost={singularityCost(game.singularityLevel)}
+            currency="Neon Cores"
+            disabled={game.cores < singularityCost(game.singularityLevel)}
+            onClick={buySingularity}
           />
         </article>
 
