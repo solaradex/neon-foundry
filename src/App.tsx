@@ -3,6 +3,8 @@ import "./App.css";
 import {
   alloyPerSecond,
   applyIdleIncome,
+  corePerSecond,
+  coreSynthCost,
   initialState,
   prestigeCost,
   refineryCost,
@@ -17,7 +19,14 @@ function loadGame(): GameState {
   try {
     const raw = localStorage.getItem(SAVE_KEY);
     if (!raw) return initialState;
-    return applyIdleIncome({ ...initialState, ...JSON.parse(raw) });
+
+    const saved = JSON.parse(raw);
+
+    return applyIdleIncome({
+      ...initialState,
+      ...saved,
+      coreSynthLevel: saved.coreSynthLevel ?? 0,
+    });
   } catch {
     return initialState;
   }
@@ -37,6 +46,7 @@ export default function App() {
     () => ({
       scrap: scrapPerSecond(game),
       alloy: alloyPerSecond(game),
+      cores: corePerSecond(game),
     }),
     [game],
   );
@@ -75,6 +85,17 @@ export default function App() {
     }));
   }
 
+  function buyCoreSynth() {
+    const cost = coreSynthCost(game.coreSynthLevel);
+    if (game.alloy < cost) return;
+
+    setGame((current) => ({
+      ...current,
+      alloy: current.alloy - cost,
+      coreSynthLevel: current.coreSynthLevel + 1,
+    }));
+  }
+
   function reboot() {
     const cost = prestigeCost(game);
     if (game.alloy < cost) return;
@@ -104,7 +125,7 @@ export default function App() {
       <section className="resources">
         <Resource icon="⚙" name="Scrap" value={game.scrap} rate={rates.scrap} />
         <Resource icon="◈" name="Alloy" value={game.alloy} rate={rates.alloy} />
-        <Resource icon="✦" name="Neon Cores" value={game.cores} rate={0} />
+        <Resource icon="✦" name="Neon Cores" value={game.cores} rate={rates.cores} />
       </section>
 
       <section className="grid">
@@ -126,6 +147,15 @@ export default function App() {
             cost={refineryCost(game.refineryLevel)}
             disabled={game.scrap < refineryCost(game.refineryLevel)}
             onClick={buyRefinery}
+          />
+
+          <Upgrade
+            title="Neon Core Synthesizer"
+            subtitle={`Level ${game.coreSynthLevel} · +0.01 Core/s`}
+            cost={coreSynthCost(game.coreSynthLevel)}
+            currency="Alloy"
+            disabled={game.alloy < coreSynthCost(game.coreSynthLevel)}
+            onClick={buyCoreSynth}
           />
         </article>
 
@@ -198,12 +228,14 @@ function Upgrade({
   title,
   subtitle,
   cost,
+  currency = "Scrap",
   disabled,
   onClick,
 }: {
   title: string;
   subtitle: string;
   cost: number;
+  currency?: string;
   disabled: boolean;
   onClick: () => void;
 }) {
@@ -214,7 +246,7 @@ function Upgrade({
         <span>{subtitle}</span>
       </div>
       <button disabled={disabled} onClick={onClick}>
-        Upgrade · {format(cost)} Scrap
+        Upgrade · {format(cost)} {currency}
       </button>
     </div>
   );
