@@ -461,7 +461,7 @@ export default function App() {
     <main className="app-shell">
       <aside className="sidebar">
         <div className="brand">
-          <div className="brand-mark">◫</div>
+          <div className="brand-mark"><img src="/neon-flame.svg" alt="" /></div>
           <div>
             <span>NEON</span>
             <strong>FOUNDRY</strong>
