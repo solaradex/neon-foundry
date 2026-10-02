@@ -149,7 +149,7 @@ export default function App() {
             subtitle={
               refineryUnlocked
                 ? `Level ${game.refineryLevel} · +0.08 Alloy/s`
-                : "LOCKED · Reach 100 Scrap"
+                : `LOCKED · ${Math.floor(game.scrap)} / 100 Scrap`
             }
             cost={refineryCost(game.refineryLevel)}
             disabled={
@@ -163,7 +163,7 @@ export default function App() {
             subtitle={
               coreSynthUnlocked
                 ? `Level ${game.coreSynthLevel} · +0.01 Core/s`
-                : "LOCKED · Reach 500 Alloy"
+                : `LOCKED · ${Math.floor(game.alloy)} / 500 Alloy`
             }
             cost={coreSynthCost(game.coreSynthLevel)}
             currency="Alloy"
