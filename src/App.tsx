@@ -20,23 +20,60 @@ import {
 
 const SAVE_KEY = "neon-foundry-save-v1";
 
-function loadGame(): GameState {
+type LoadedSession = {
+  game: GameState;
+  offlineSeconds: number;
+  offlineScrap: number;
+  offlineAlloy: number;
+  offlineCores: number;
+};
+
+function loadSession(): LoadedSession {
   try {
     const raw = localStorage.getItem(SAVE_KEY);
-    if (!raw) return initialState;
+    if (!raw) {
+      return {
+        game: initialState,
+        offlineSeconds: 0,
+        offlineScrap: 0,
+        offlineAlloy: 0,
+        offlineCores: 0,
+      };
+    }
 
     const saved = JSON.parse(raw);
 
-    return {
+    const previousState: GameState = {
       ...initialState,
       ...saved,
       coreSynthLevel: saved.coreSynthLevel ?? 0,
       conveyorLevel: saved.conveyorLevel ?? 0,
       recyclerLevel: saved.recyclerLevel ?? 0,
       furnaceLevel: saved.furnaceLevel ?? 0,
+      resonatorLevel: saved.resonatorLevel ?? 0,
+      droneLevel: saved.droneLevel ?? 0,
+    };
+
+    const offlineSeconds = getOfflineSeconds(previousState);
+    const offlineScrap = scrapPerSecond(previousState) * offlineSeconds;
+    const offlineAlloy = alloyPerSecond(previousState) * offlineSeconds;
+    const offlineCores = corePerSecond(previousState) * offlineSeconds;
+
+    return {
+      game: applyIdleIncome(previousState),
+      offlineSeconds,
+      offlineScrap,
+      offlineAlloy,
+      offlineCores,
     };
   } catch {
-    return initialState;
+    return {
+      game: initialState,
+      offlineSeconds: 0,
+      offlineScrap: 0,
+      offlineAlloy: 0,
+      offlineCores: 0,
+    };
   }
 }
 
@@ -66,10 +103,11 @@ function format(value: number) {
 }
 
 export default function App() {
-  const [game, setGame] = useState<GameState>(loadGame);
-  const [offlineSeconds] = useState(() => getOfflineSeconds(game));
+  const [session] = useState(loadSession);
+  const [game, setGame] = useState<GameState>(session.game);
+  const [offlineSeconds] = useState(session.offlineSeconds);
   const [showOfflineReport, setShowOfflineReport] = useState(
-    () => offlineSeconds >= 10,
+    () => session.offlineSeconds >= 10,
   );
 
   const refineryUnlocked = game.scrap >= 100 || game.refineryLevel > 0;
@@ -200,9 +238,7 @@ export default function App() {
     setGame(initialState);
   }
 
-  const offlineScrap = scrapPerSecond(game) * offlineSeconds;
-  const offlineAlloy = alloyPerSecond(game) * offlineSeconds;
-  const offlineCores = corePerSecond(game) * offlineSeconds;
+  const { offlineScrap, offlineAlloy, offlineCores } = session;
 
   return (
     <main className="shell">
