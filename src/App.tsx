@@ -8,47 +8,46 @@ import {
   corePerSecond,
   coreSynthCost,
   droneCost,
-  quantumCost,
   dynamoCost,
   furnaceCost,
   initialState,
   nanobotCost,
-  singularityCost,
+  quantumCost,
   prestigeCost,
   recyclerCost,
   resonatorCost,
   refineryCost,
   scrapPerSecond,
   scrapUpgradeCost,
+  singularityCost,
   type GameState,
 } from "./game";
 
 const SAVE_KEY = "neon-foundry-save-v1";
 
-type LoadedSession = {
-  game: GameState;
-  offlineSeconds: number;
-  offlineScrap: number;
-  offlineAlloy: number;
-  offlineCores: number;
+type Filter = "All" | "Basic" | "Production" | "Advanced";
+
+type UpgradeDefinition = {
+  key: string;
+  title: string;
+  category: Exclude<Filter, "All">;
+  currency: "Scrap" | "Alloy" | "Neon Cores";
+  icon: string;
+  level: number;
+  cost: number;
+  effect: string;
+  disabled: boolean;
+  onBuy: () => void;
 };
 
-function loadSession(): LoadedSession {
+function loadSession(): GameState {
   try {
     const raw = localStorage.getItem(SAVE_KEY);
-    if (!raw) {
-      return {
-        game: initialState,
-        offlineSeconds: 0,
-        offlineScrap: 0,
-        offlineAlloy: 0,
-        offlineCores: 0,
-      };
-    }
+    if (!raw) return initialState;
 
     const saved = JSON.parse(raw);
 
-    const previousState: GameState = {
+    return {
       ...initialState,
       ...saved,
       coreSynthLevel: saved.coreSynthLevel ?? 0,
@@ -63,27 +62,8 @@ function loadSession(): LoadedSession {
       nanobotLevel: saved.nanobotLevel ?? 0,
       singularityLevel: saved.singularityLevel ?? 0,
     };
-
-    const offlineSeconds = getOfflineSeconds(previousState);
-    const offlineScrap = scrapPerSecond(previousState) * offlineSeconds;
-    const offlineAlloy = alloyPerSecond(previousState) * offlineSeconds;
-    const offlineCores = corePerSecond(previousState) * offlineSeconds;
-
-    return {
-      game: applyIdleIncome(previousState),
-      offlineSeconds,
-      offlineScrap,
-      offlineAlloy,
-      offlineCores,
-    };
   } catch {
-    return {
-      game: initialState,
-      offlineSeconds: 0,
-      offlineScrap: 0,
-      offlineAlloy: 0,
-      offlineCores: 0,
-    };
+    return initialState;
   }
 }
 
@@ -94,17 +74,6 @@ function getOfflineSeconds(state: GameState, now = Date.now()) {
   );
 }
 
-function formatDuration(seconds: number) {
-  const total = Math.max(0, Math.floor(seconds));
-  const hours = Math.floor(total / 3600);
-  const minutes = Math.floor((total % 3600) / 60);
-  const secs = total % 60;
-
-  if (hours > 0) return `${hours}h ${minutes}m`;
-  if (minutes > 0) return `${minutes}m ${secs}s`;
-  return `${secs}s`;
-}
-
 function format(value: number) {
   return new Intl.NumberFormat("en-US", {
     maximumFractionDigits: value < 100 ? 1 : 0,
@@ -112,10 +81,23 @@ function format(value: number) {
   }).format(value);
 }
 
+function loadOfflineSession() {
+  const previous = loadSession();
+  const offlineSeconds = getOfflineSeconds(previous);
+
+  return {
+    game: applyIdleIncome(previous),
+    offlineSeconds,
+    offlineScrap: scrapPerSecond(previous) * offlineSeconds,
+    offlineAlloy: alloyPerSecond(previous) * offlineSeconds,
+    offlineCores: corePerSecond(previous) * offlineSeconds,
+  };
+}
+
 export default function App() {
-  const [session] = useState(loadSession);
+  const [session] = useState(loadOfflineSession);
   const [game, setGame] = useState<GameState>(session.game);
-  const [offlineSeconds] = useState(session.offlineSeconds);
+  const [filter, setFilter] = useState<Filter>("All");
   const [showOfflineReport, setShowOfflineReport] = useState(
     () => session.offlineSeconds >= 10,
   );
@@ -132,6 +114,31 @@ export default function App() {
     [game],
   );
 
+  const totalUpgrades =
+    game.scrapLevel +
+    game.refineryLevel +
+    game.coreSynthLevel +
+    game.conveyorLevel +
+    game.recyclerLevel +
+    game.furnaceLevel +
+    game.resonatorLevel +
+    game.droneLevel +
+    game.dynamoLevel +
+    game.arcFurnaceLevel +
+    game.quantumLevel +
+    game.nanobotLevel +
+    game.singularityLevel -
+    1;
+
+  const advancedUpgrades =
+    game.resonatorLevel +
+    game.droneLevel +
+    game.dynamoLevel +
+    game.arcFurnaceLevel +
+    game.quantumLevel +
+    game.nanobotLevel +
+    game.singularityLevel;
+
   useEffect(() => {
     const timer = window.setInterval(() => {
       setGame((current) => applyIdleIncome(current));
@@ -147,7 +154,6 @@ export default function App() {
   function buyHarvester() {
     const cost = scrapUpgradeCost(game.scrapLevel);
     if (game.scrap < cost) return;
-
     setGame((current) => ({
       ...current,
       scrap: current.scrap - cost,
@@ -158,7 +164,6 @@ export default function App() {
   function buyRefinery() {
     const cost = refineryCost(game.refineryLevel);
     if (!refineryUnlocked || game.scrap < cost) return;
-
     setGame((current) => ({
       ...current,
       scrap: current.scrap - cost,
@@ -169,7 +174,6 @@ export default function App() {
   function buyConveyor() {
     const cost = conveyorCost(game.conveyorLevel);
     if (game.scrap < cost) return;
-
     setGame((current) => ({
       ...current,
       scrap: current.scrap - cost,
@@ -180,7 +184,6 @@ export default function App() {
   function buyRecycler() {
     const cost = recyclerCost(game.recyclerLevel);
     if (game.scrap < cost) return;
-
     setGame((current) => ({
       ...current,
       scrap: current.scrap - cost,
@@ -191,55 +194,10 @@ export default function App() {
   function buyFurnace() {
     const cost = furnaceCost(game.furnaceLevel);
     if (game.alloy < cost) return;
-
     setGame((current) => ({
       ...current,
       alloy: current.alloy - cost,
       furnaceLevel: current.furnaceLevel + 1,
-    }));
-  }
-
-  function buyResonator() {
-    const cost = resonatorCost(game.resonatorLevel);
-    if (game.cores < cost) return;
-
-    setGame((current) => ({
-      ...current,
-      cores: current.cores - cost,
-      resonatorLevel: current.resonatorLevel + 1,
-    }));
-  }
-
-  function buyDrone() {
-    const cost = droneCost(game.droneLevel);
-    if (game.cores < cost) return;
-
-    setGame((current) => ({
-      ...current,
-      cores: current.cores - cost,
-      droneLevel: current.droneLevel + 1,
-    }));
-  }
-
-  function buyDynamo() {
-    const cost = dynamoCost(game.dynamoLevel);
-    if (game.scrap < cost) return;
-
-    setGame((current) => ({
-      ...current,
-      scrap: current.scrap - cost,
-      dynamoLevel: current.dynamoLevel + 1,
-    }));
-  }
-
-  function buyArcFurnace() {
-    const cost = arcFurnaceCost(game.arcFurnaceLevel);
-    if (game.alloy < cost) return;
-
-    setGame((current) => ({
-      ...current,
-      alloy: current.alloy - cost,
-      arcFurnaceLevel: current.arcFurnaceLevel + 1,
     }));
   }
 
@@ -254,10 +212,59 @@ export default function App() {
     }));
   }
 
+  function buyCoreSynth() {
+    const cost = coreSynthCost(game.coreSynthLevel);
+    if (!coreSynthUnlocked || game.alloy < cost) return;
+    setGame((current) => ({
+      ...current,
+      alloy: current.alloy - cost,
+      coreSynthLevel: current.coreSynthLevel + 1,
+    }));
+  }
+
+  function buyResonator() {
+    const cost = resonatorCost(game.resonatorLevel);
+    if (game.cores < cost) return;
+    setGame((current) => ({
+      ...current,
+      cores: current.cores - cost,
+      resonatorLevel: current.resonatorLevel + 1,
+    }));
+  }
+
+  function buyDrone() {
+    const cost = droneCost(game.droneLevel);
+    if (game.cores < cost) return;
+    setGame((current) => ({
+      ...current,
+      cores: current.cores - cost,
+      droneLevel: current.droneLevel + 1,
+    }));
+  }
+
+  function buyDynamo() {
+    const cost = dynamoCost(game.dynamoLevel);
+    if (game.scrap < cost) return;
+    setGame((current) => ({
+      ...current,
+      scrap: current.scrap - cost,
+      dynamoLevel: current.dynamoLevel + 1,
+    }));
+  }
+
+  function buyArcFurnace() {
+    const cost = arcFurnaceCost(game.arcFurnaceLevel);
+    if (game.alloy < cost) return;
+    setGame((current) => ({
+      ...current,
+      alloy: current.alloy - cost,
+      arcFurnaceLevel: current.arcFurnaceLevel + 1,
+    }));
+  }
+
   function buyNanobot() {
     const cost = nanobotCost(game.nanobotLevel);
     if (game.cores < cost) return;
-
     setGame((current) => ({
       ...current,
       cores: current.cores - cost,
@@ -268,22 +275,10 @@ export default function App() {
   function buySingularity() {
     const cost = singularityCost(game.singularityLevel);
     if (game.cores < cost) return;
-
     setGame((current) => ({
       ...current,
       cores: current.cores - cost,
       singularityLevel: current.singularityLevel + 1,
-    }));
-  }
-
-  function buyCoreSynth() {
-    const cost = coreSynthCost(game.coreSynthLevel);
-    if (!coreSynthUnlocked || game.alloy < cost) return;
-
-    setGame((current) => ({
-      ...current,
-      alloy: current.alloy - cost,
-      coreSynthLevel: current.coreSynthLevel + 1,
     }));
   }
 
@@ -298,278 +293,390 @@ export default function App() {
     });
   }
 
-  function resetGame() {
-    localStorage.removeItem(SAVE_KEY);
-    setGame(initialState);
-  }
+  const upgrades: UpgradeDefinition[] = [
+    {
+      key: "harvester",
+      title: "Scrap Harvester",
+      category: "Basic",
+      currency: "Scrap",
+      icon: "⚙",
+      level: game.scrapLevel,
+      cost: scrapUpgradeCost(game.scrapLevel),
+      effect: "+0.75 Scrap/s",
+      disabled: game.scrap < scrapUpgradeCost(game.scrapLevel),
+      onBuy: buyHarvester,
+    },
+    {
+      key: "conveyor",
+      title: "Conveyor Optimization",
+      category: "Production",
+      currency: "Scrap",
+      icon: "▰",
+      level: game.conveyorLevel,
+      cost: conveyorCost(game.conveyorLevel),
+      effect: "+5% Scrap",
+      disabled: game.scrap < conveyorCost(game.conveyorLevel),
+      onBuy: buyConveyor,
+    },
+    {
+      key: "recycler",
+      title: "Magnetic Recycler",
+      category: "Production",
+      currency: "Scrap",
+      icon: "◉",
+      level: game.recyclerLevel,
+      cost: recyclerCost(game.recyclerLevel),
+      effect: "+10% Scrap",
+      disabled: game.scrap < recyclerCost(game.recyclerLevel),
+      onBuy: buyRecycler,
+    },
+    {
+      key: "refinery",
+      title: "Alloy Refinery",
+      category: "Production",
+      currency: "Scrap",
+      icon: "◆",
+      level: game.refineryLevel,
+      cost: refineryCost(game.refineryLevel),
+      effect: "+0.08 Alloy/s",
+      disabled: !refineryUnlocked || game.scrap < refineryCost(game.refineryLevel),
+      onBuy: buyRefinery,
+    },
+    {
+      key: "furnace",
+      title: "Plasma Furnace",
+      category: "Production",
+      currency: "Alloy",
+      icon: "🔥",
+      level: game.furnaceLevel,
+      cost: furnaceCost(game.furnaceLevel),
+      effect: "+15% Alloy",
+      disabled: game.alloy < furnaceCost(game.furnaceLevel),
+      onBuy: buyFurnace,
+    },
+    {
+      key: "core",
+      title: "Core Synthesizer",
+      category: "Advanced",
+      currency: "Alloy",
+      icon: "✦",
+      level: game.coreSynthLevel,
+      cost: coreSynthCost(game.coreSynthLevel),
+      effect: "+0.01 Core/s",
+      disabled: !coreSynthUnlocked || game.alloy < coreSynthCost(game.coreSynthLevel),
+      onBuy: buyCoreSynth,
+    },
+    {
+      key: "resonator",
+      title: "Core Resonator",
+      category: "Advanced",
+      currency: "Neon Cores",
+      icon: "◇",
+      level: game.resonatorLevel,
+      cost: resonatorCost(game.resonatorLevel),
+      effect: "+25% Cores",
+      disabled: game.cores < resonatorCost(game.resonatorLevel),
+      onBuy: buyResonator,
+    },
+    {
+      key: "drone",
+      title: "Drone Swarm",
+      category: "Advanced",
+      currency: "Neon Cores",
+      icon: "✧",
+      level: game.droneLevel,
+      cost: droneCost(game.droneLevel),
+      effect: "+10% All",
+      disabled: game.cores < droneCost(game.droneLevel),
+      onBuy: buyDrone,
+    },
+    {
+      key: "dynamo",
+      title: "Industrial Dynamo",
+      category: "Advanced",
+      currency: "Scrap",
+      icon: "⚡",
+      level: game.dynamoLevel,
+      cost: dynamoCost(game.dynamoLevel),
+      effect: "+20% Scrap",
+      disabled: game.scrap < dynamoCost(game.dynamoLevel),
+      onBuy: buyDynamo,
+    },
+    {
+      key: "arc",
+      title: "Arc Furnace",
+      category: "Advanced",
+      currency: "Alloy",
+      icon: "◈",
+      level: game.arcFurnaceLevel,
+      cost: arcFurnaceCost(game.arcFurnaceLevel),
+      effect: "+25% Alloy",
+      disabled: game.alloy < arcFurnaceCost(game.arcFurnaceLevel),
+      onBuy: buyArcFurnace,
+    },
+    {
+      key: "quantum",
+      title: "Quantum Condenser",
+      category: "Advanced",
+      currency: "Neon Cores",
+      icon: "⬡",
+      level: game.quantumLevel,
+      cost: quantumCost(game.quantumLevel),
+      effect: "+40% Cores",
+      disabled: game.cores < quantumCost(game.quantumLevel),
+      onBuy: buyQuantum,
+    },
+    {
+      key: "nanobot",
+      title: "Nanobot Fabricator",
+      category: "Advanced",
+      currency: "Neon Cores",
+      icon: "▣",
+      level: game.nanobotLevel,
+      cost: nanobotCost(game.nanobotLevel),
+      effect: "+15% All",
+      disabled: game.cores < nanobotCost(game.nanobotLevel),
+      onBuy: buyNanobot,
+    },
+    {
+      key: "singularity",
+      title: "Singularity Engine",
+      category: "Advanced",
+      currency: "Neon Cores",
+      icon: "✹",
+      level: game.singularityLevel,
+      cost: singularityCost(game.singularityLevel),
+      effect: "+30% All",
+      disabled: game.cores < singularityCost(game.singularityLevel),
+      onBuy: buySingularity,
+    },
+  ];
 
-  const { offlineScrap, offlineAlloy, offlineCores } = session;
+  const visibleUpgrades =
+    filter === "All"
+      ? upgrades
+      : upgrades.filter((upgrade) => upgrade.category === filter);
 
   return (
-    <main className="shell">
+    <main className="app-shell">
+      <aside className="sidebar">
+        <div className="brand">
+          <div className="brand-mark">◫</div>
+          <div>
+            <span>NEON</span>
+            <strong>FOUNDRY</strong>
+          </div>
+        </div>
+
+        <nav className="side-nav">
+          <button className="nav-item active"><span>▥</span><div><strong>Factory</strong><small>Build & Upgrade</small></div></button>
+          <button className="nav-item"><span>▤</span><div><strong>Contracts</strong><small>Complete Objectives</small></div></button>
+          <button className="nav-item"><span>◇</span><div><strong>Prestige</strong><small>Rebirth & Grow</small></div></button>
+          <button className="nav-item"><span>▥</span><div><strong>Stats</strong><small>Your Progress</small></div></button>
+          <button className="nav-item"><span>⚙</span><div><strong>Settings</strong><small>Game Options</small></div></button>
+        </nav>
+
+        <div className="sidebar-promo">
+          <div className="promo-glow" />
+          <span>BUILD</span>
+          <strong>AUTOMATE</strong>
+          <strong>EXPAND</strong>
+          <em>ASCEND</em>
+          <p>Turn scrap into a neon-powered empire.</p>
+          <div className="promo-bar"><i /></div>
+        </div>
+      </aside>
+
+      <section className="main-content">
+        <header className="resource-bar">
+          <ResourceCard icon="▰" name="SCRAP" value={game.scrap} rate={rates.scrap} />
+          <ResourceCard icon="◆" name="ALLOY" value={game.alloy} rate={rates.alloy} />
+          <ResourceCard icon="✦" name="NEON CORES" value={game.cores} rate={rates.cores} />
+          <ResourceCard icon="✹" name="PRESTIGE" value={game.prestige} rate={game.prestige * 15} suffix="% boost" />
+          <button className="prestige-button" onClick={reboot} disabled={game.alloy < prestigeCost(game)}>
+            <span>✦</span>
+            <div><strong>PRESTIGE</strong><small>Reset • Grow Stronger</small></div>
+          </button>
+        </header>
+
+        <div className="dashboard-grid">
+          <section className="center-column">
+            <div className="factory-hero">
+              <div className="hero-overlay" />
+              <div className="hero-copy">
+                <p>YOUR FACTORY</p>
+                <h2>Upgrade. Automate. Generate. Expand.</h2>
+              </div>
+              <div className="hero-output">
+                <span>FACTORY OUTPUT</span>
+                <div>▰ <b>{format(rates.scrap)}</b> / sec</div>
+                <div>◆ <b>{format(rates.alloy)}</b> / sec</div>
+                <div>✦ <b>{format(rates.cores)}</b> / sec</div>
+              </div>
+              <div className="factory-scene">
+                <span className="tower tower-a" />
+                <span className="tower tower-b" />
+                <span className="tower tower-c" />
+                <span className="machine machine-a" />
+                <span className="machine machine-b" />
+                <span className="machine machine-c" />
+                <span className="machine machine-d" />
+                <span className="beam beam-a" />
+                <span className="beam beam-b" />
+                <span className="beam beam-c" />
+              </div>
+            </div>
+
+            <section className="production-panel">
+              <div className="section-heading">
+                <div>
+                  <h2>PRODUCTION FLOOR</h2>
+                  <span>13 Upgrades • Build Your Empire</span>
+                </div>
+                <div className="filter-tabs">
+                  {(["All", "Basic", "Production", "Advanced"] as Filter[]).map((item) => (
+                    <button key={item} className={filter === item ? "selected" : ""} onClick={() => setFilter(item)}>
+                      {item}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="upgrade-grid">
+                {visibleUpgrades.map((upgrade) => (
+                  <UpgradeCard key={upgrade.key} upgrade={upgrade} />
+                ))}
+              </div>
+            </section>
+          </section>
+
+          <aside className="right-column">
+            <ContractsPanel />
+            <StatsPanel
+              totalUpgrades={Math.max(totalUpgrades, 0)}
+              advancedUpgrades={advancedUpgrades}
+              prestige={game.prestige}
+            />
+            <div className="side-art-card">
+              <span>SMALL FACTORIES</span>
+              <strong>BUILD RESOURCES.</strong>
+              <strong>GREAT FACTORIES</strong>
+              <em>BUILD FUTURES.</em>
+            </div>
+          </aside>
+        </div>
+      </section>
+
       {showOfflineReport && (
         <div className="offline-overlay">
           <section className="offline-modal" role="dialog" aria-modal="true">
             <p className="eyebrow">FACTORY STATUS REPORT</p>
             <h2>WELCOME BACK</h2>
-            <p>Your factory operated for <strong>{formatDuration(offlineSeconds)}</strong> while you were away.</p>
-
+            <p>You generated resources while away.</p>
             <div className="offline-rewards">
-              <div>
-                <span>⚙ Scrap</span>
-                <strong>+{format(offlineScrap)}</strong>
-              </div>
-              <div>
-                <span>◈ Alloy</span>
-                <strong>+{format(offlineAlloy)}</strong>
-              </div>
-              <div>
-                <span>✦ Neon Cores</span>
-                <strong>+{format(offlineCores)}</strong>
-              </div>
+              <div><span>▰ Scrap</span><strong>+{format(session.offlineScrap)}</strong></div>
+              <div><span>◆ Alloy</span><strong>+{format(session.offlineAlloy)}</strong></div>
+              <div><span>✦ Neon Cores</span><strong>+{format(session.offlineCores)}</strong></div>
             </div>
-
-            <button onClick={() => setShowOfflineReport(false)}>
-              COLLECT REPORT
-            </button>
+            <button onClick={() => setShowOfflineReport(false)}>COLLECT REPORT</button>
           </section>
         </div>
       )}
-      <header className="topbar">
-        <div>
-          <p className="eyebrow">AUTOMATED INDUSTRIAL SIMULATION</p>
-          <h1>NEON FOUNDRY</h1>
-        </div>
-        <div className="prestige">⚡ Reboots: {game.prestige}</div>
-      </header>
-
-      <section className="resources">
-        <Resource icon="⚙" name="Scrap" value={game.scrap} rate={rates.scrap} />
-        <Resource icon="◈" name="Alloy" value={game.alloy} rate={rates.alloy} />
-        <Resource icon="✦" name="Neon Cores" value={game.cores} rate={rates.cores} />
-      </section>
-
-      <section className="grid">
-        <article className="panel">
-          <h2>Production Floor</h2>
-          <p>Build machines to automate the Neon Foundry.</p>
-
-          <Upgrade
-            title="Scrap Harvester"
-            subtitle={`Level ${game.scrapLevel} · +0.75 Scrap/s`}
-            cost={scrapUpgradeCost(game.scrapLevel)}
-            disabled={game.scrap < scrapUpgradeCost(game.scrapLevel)}
-            onClick={buyHarvester}
-          />
-
-          <Upgrade
-            title="Conveyor Optimization"
-            subtitle={`Level ${game.conveyorLevel} · +5% Scrap production`}
-            cost={conveyorCost(game.conveyorLevel)}
-            disabled={game.scrap < conveyorCost(game.conveyorLevel)}
-            onClick={buyConveyor}
-          />
-
-          <Upgrade
-            title="Magnetic Recycler"
-            subtitle={`Level ${game.recyclerLevel} · +10% Scrap production`}
-            cost={recyclerCost(game.recyclerLevel)}
-            disabled={game.scrap < recyclerCost(game.recyclerLevel)}
-            onClick={buyRecycler}
-          />
-
-          <Upgrade
-            title="Alloy Refinery"
-            subtitle={
-              refineryUnlocked
-                ? `Level ${game.refineryLevel} · +0.08 Alloy/s`
-                : `LOCKED · ${Math.floor(game.scrap)} / 100 Scrap`
-            }
-            cost={refineryCost(game.refineryLevel)}
-            disabled={
-              !refineryUnlocked || game.scrap < refineryCost(game.refineryLevel)
-            }
-            onClick={buyRefinery}
-          />
-
-          <Upgrade
-            title="Plasma Furnace"
-            subtitle={`Level ${game.furnaceLevel} · +15% Alloy production`}
-            cost={furnaceCost(game.furnaceLevel)}
-            currency="Alloy"
-            disabled={
-              game.alloy < furnaceCost(game.furnaceLevel)
-            }
-            onClick={buyFurnace}
-          />
-
-          <Upgrade
-            title="Neon Core Synthesizer"
-            subtitle={
-              coreSynthUnlocked
-                ? `Level ${game.coreSynthLevel} · +0.01 Core/s`
-                : `LOCKED · ${Math.floor(game.alloy)} / 500 Alloy`
-            }
-            cost={coreSynthCost(game.coreSynthLevel)}
-            currency="Alloy"
-            disabled={
-              !coreSynthUnlocked || game.alloy < coreSynthCost(game.coreSynthLevel)
-            }
-            onClick={buyCoreSynth}
-          />
-
-          <Upgrade
-            title="Core Resonator"
-            subtitle={`Level ${game.resonatorLevel} · +25% Neon Core production`}
-            cost={resonatorCost(game.resonatorLevel)}
-            currency="Neon Cores"
-            disabled={game.cores < resonatorCost(game.resonatorLevel)}
-            onClick={buyResonator}
-          />
-
-          <Upgrade
-            title="Drone Swarm"
-            subtitle={`Level ${game.droneLevel} · +10% all production`}
-            cost={droneCost(game.droneLevel)}
-            currency="Neon Cores"
-            disabled={game.cores < droneCost(game.droneLevel)}
-            onClick={buyDrone}
-          />
-
-          <Upgrade
-            title="Industrial Dynamo"
-            subtitle={`Level ${game.dynamoLevel} · +20% Scrap production`}
-            cost={dynamoCost(game.dynamoLevel)}
-            disabled={game.scrap < dynamoCost(game.dynamoLevel)}
-            onClick={buyDynamo}
-          />
-
-          <Upgrade
-            title="Arc Furnace"
-            subtitle={`Level ${game.arcFurnaceLevel} · +25% Alloy production`}
-            cost={arcFurnaceCost(game.arcFurnaceLevel)}
-            currency="Alloy"
-            disabled={game.alloy < arcFurnaceCost(game.arcFurnaceLevel)}
-            onClick={buyArcFurnace}
-          />
-
-          <Upgrade
-            title="Quantum Condenser"
-            subtitle={`Level ${game.quantumLevel} · +40% Neon Core production`}
-            cost={quantumCost(game.quantumLevel)}
-            currency="Neon Cores"
-            disabled={game.cores < quantumCost(game.quantumLevel)}
-            onClick={buyQuantum}
-          />
-
-          <Upgrade
-            title="Nanobot Fabricator"
-            subtitle={`Level ${game.nanobotLevel} · +15% all production`}
-            cost={nanobotCost(game.nanobotLevel)}
-            currency="Neon Cores"
-            disabled={game.cores < nanobotCost(game.nanobotLevel)}
-            onClick={buyNanobot}
-          />
-
-          <Upgrade
-            title="Singularity Engine"
-            subtitle={`Level ${game.singularityLevel} · +30% all production`}
-            cost={singularityCost(game.singularityLevel)}
-            currency="Neon Cores"
-            disabled={game.cores < singularityCost(game.singularityLevel)}
-            onClick={buySingularity}
-          />
-        </article>
-
-        <article className="panel accent">
-          <h2>System Reboot</h2>
-          <p>
-            Reset factory progress and gain a permanent <strong>+15%</strong>
-            {" "}production multiplier.
-          </p>
-          <p className="cost">Requires {format(prestigeCost(game))} Alloy</p>
-          <button
-            className="danger"
-            disabled={game.alloy < prestigeCost(game)}
-            onClick={reboot}
-          >
-            Reboot Factory
-          </button>
-        </article>
-      </section>
-
-      <section className="panel">
-        <h2>Future Store</h2>
-        <div className="hook-grid">
-          <div>
-            <strong>Rewarded boost</strong>
-            <span>Double offline production for four hours.</span>
-          </div>
-          <div>
-            <strong>Cosmetic shop</strong>
-            <span>Factory themes, robot skins, and animations.</span>
-          </div>
-          <div>
-            <strong>Season pass</strong>
-            <span>Optional rewards, quests, and visual items.</span>
-          </div>
-        </div>
-      </section>
-
-      <button className="reset" onClick={resetGame}>
-        Reset local save
-      </button>
     </main>
   );
 }
 
-function Resource({
+function ResourceCard({
   icon,
   name,
   value,
   rate,
+  suffix,
 }: {
   icon: string;
   name: string;
   value: number;
   rate: number;
+  suffix?: string;
 }) {
   return (
-    <article className="resource">
-      <span className="resource-icon">{icon}</span>
+    <article className="resource-card">
+      <span className="resource-card-icon">{icon}</span>
       <div>
-        <p>{name}</p>
+        <small>{name}</small>
         <strong>{format(value)}</strong>
-        <small>+{format(rate)}/sec</small>
+        <em>+{format(rate)} / sec{suffix ? ` ${suffix}` : ""}</em>
       </div>
     </article>
   );
 }
 
-function Upgrade({
-  title,
-  subtitle,
-  cost,
-  currency = "Scrap",
-  disabled,
-  onClick,
+function UpgradeCard({ upgrade }: { upgrade: UpgradeDefinition }) {
+  return (
+    <article className={`upgrade-card ${upgrade.disabled ? "locked" : ""}`}>
+      <div className="upgrade-art"><span>{upgrade.icon}</span></div>
+      <div className="upgrade-info">
+        <strong>{upgrade.title}</strong>
+        <span>Lv. {upgrade.level}</span>
+        <em>{upgrade.effect}</em>
+        <small>Cost: {format(upgrade.cost)} {upgrade.currency}</small>
+      </div>
+      <button disabled={upgrade.disabled} onClick={upgrade.onBuy}>UPGRADE</button>
+    </article>
+  );
+}
+
+function ContractsPanel() {
+  const contracts = [
+    ["Produce 1,000 Scrap", "742 / 1,000", "Reward: +50 Alloy"],
+    ["Produce 100 Alloy", "68 / 100", "Reward: +10 Neon Cores"],
+    ["Reach 10 Scrap Upgrades", "6 / 10", "Reward: +1 Prestige"],
+    ["Produce 10 Neon Cores", "4 / 10", "Reward: +100 Alloy"],
+    ["Purchase 1 Advanced Upgrade", "0 / 1", "Reward: +25% Production (1h)"],
+  ];
+
+  return (
+    <section className="info-panel">
+      <div className="info-heading"><h2>FACTORY CONTRACTS</h2><span>Resets in 12h 34m</span></div>
+      {contracts.map(([title, progress, reward], index) => (
+        <div className="contract" key={title}>
+          <div className={`contract-icon c${index}`}>{["⚙", "◆", "⬆", "✦", "▣"][index]}</div>
+          <div className="contract-body">
+            <strong>{title}</strong>
+            <span>{progress}</span>
+            <i className="progress-track"><b style={{ width: `${[74,68,60,40,0][index]}%` }} /></i>
+            <small>{reward}</small>
+          </div>
+        </div>
+      ))}
+    </section>
+  );
+}
+
+function StatsPanel({
+  totalUpgrades,
+  advancedUpgrades,
+  prestige,
 }: {
-  title: string;
-  subtitle: string;
-  cost: number;
-  currency?: string;
-  disabled: boolean;
-  onClick: () => void;
+  totalUpgrades: number;
+  advancedUpgrades: number;
+  prestige: number;
 }) {
   return (
-    <div className="upgrade">
-      <div>
-        <strong>{title}</strong>
-        <span>{subtitle}</span>
-      </div>
-      <button disabled={disabled} onClick={onClick}>
-        Upgrade · {format(cost)} {currency}
-      </button>
-    </div>
+    <section className="info-panel stats-panel">
+      <div className="info-heading"><h2>GAME STATS</h2></div>
+      {[
+        ["▰", "Total Scrap Produced", "24,682"],
+        ["◆", "Total Alloy Produced", "8,416"],
+        ["✦", "Total Cores Produced", "1,280"],
+        ["◷", "Time Played", "2h 14m"],
+        ["⌂", "Upgrades Purchased", String(totalUpgrades)],
+        ["▤", "Contracts Completed", "2"],
+        ["☆", "Prestige Count", String(prestige)],
+      ].map(([icon, label, value]) => (
+        <div className="stat-row" key={label}><span>{icon}</span><strong>{label}</strong><b>{value}</b></div>
+      ))}
+      <small className="advanced-count">{advancedUpgrades} advanced upgrades in the factory</small>
+    </section>
   );
 }
