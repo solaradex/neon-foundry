@@ -3,10 +3,13 @@ import "./App.css";
 import {
   alloyPerSecond,
   applyIdleIncome,
+  arcFurnaceCost,
   conveyorCost,
   corePerSecond,
   coreSynthCost,
   droneCost,
+  quantumCost,
+  dynamoCost,
   furnaceCost,
   initialState,
   prestigeCost,
@@ -52,6 +55,9 @@ function loadSession(): LoadedSession {
       furnaceLevel: saved.furnaceLevel ?? 0,
       resonatorLevel: saved.resonatorLevel ?? 0,
       droneLevel: saved.droneLevel ?? 0,
+      dynamoLevel: saved.dynamoLevel ?? 0,
+      arcFurnaceLevel: saved.arcFurnaceLevel ?? 0,
+      quantumLevel: saved.quantumLevel ?? 0,
     };
 
     const offlineSeconds = getOfflineSeconds(previousState);
@@ -208,6 +214,39 @@ export default function App() {
       ...current,
       cores: current.cores - cost,
       droneLevel: current.droneLevel + 1,
+    }));
+  }
+
+  function buyDynamo() {
+    const cost = dynamoCost(game.dynamoLevel);
+    if (game.scrap < cost) return;
+
+    setGame((current) => ({
+      ...current,
+      scrap: current.scrap - cost,
+      dynamoLevel: current.dynamoLevel + 1,
+    }));
+  }
+
+  function buyArcFurnace() {
+    const cost = arcFurnaceCost(game.arcFurnaceLevel);
+    if (game.alloy < cost) return;
+
+    setGame((current) => ({
+      ...current,
+      alloy: current.alloy - cost,
+      arcFurnaceLevel: current.arcFurnaceLevel + 1,
+    }));
+  }
+
+  function buyQuantum() {
+    const cost = quantumCost(game.quantumLevel);
+    if (game.cores < cost) return;
+
+    setGame((current) => ({
+      ...current,
+      cores: current.cores - cost,
+      quantumLevel: current.quantumLevel + 1,
     }));
   }
 
@@ -369,6 +408,32 @@ export default function App() {
             currency="Neon Cores"
             disabled={game.cores < droneCost(game.droneLevel)}
             onClick={buyDrone}
+          />
+
+          <Upgrade
+            title="Industrial Dynamo"
+            subtitle={`Level ${game.dynamoLevel} · +20% Scrap production`}
+            cost={dynamoCost(game.dynamoLevel)}
+            disabled={game.scrap < dynamoCost(game.dynamoLevel)}
+            onClick={buyDynamo}
+          />
+
+          <Upgrade
+            title="Arc Furnace"
+            subtitle={`Level ${game.arcFurnaceLevel} · +25% Alloy production`}
+            cost={arcFurnaceCost(game.arcFurnaceLevel)}
+            currency="Alloy"
+            disabled={game.alloy < arcFurnaceCost(game.arcFurnaceLevel)}
+            onClick={buyArcFurnace}
+          />
+
+          <Upgrade
+            title="Quantum Condenser"
+            subtitle={`Level ${game.quantumLevel} · +40% Neon Core production`}
+            cost={quantumCost(game.quantumLevel)}
+            currency="Neon Cores"
+            disabled={game.cores < quantumCost(game.quantumLevel)}
+            onClick={buyQuantum}
           />
         </article>
 

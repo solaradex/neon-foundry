@@ -10,6 +10,11 @@ export type GameState = {
   furnaceLevel: number;
   resonatorLevel: number;
   droneLevel: number;
+  dynamoLevel: number;
+  arcFurnaceLevel: number;
+  quantumLevel: number;
+  nanobotLevel: number;
+  singularityLevel: number;
   prestige: number;
   lastSavedAt: number;
 };
@@ -26,29 +31,40 @@ export const initialState: GameState = {
   furnaceLevel: 0,
   resonatorLevel: 0,
   droneLevel: 0,
+  dynamoLevel: 0,
+  arcFurnaceLevel: 0,
+  quantumLevel: 0,
+  nanobotLevel: 0,
+  singularityLevel: 0,
   prestige: 0,
   lastSavedAt: Date.now(),
 };
 
 const multiplier = (state: GameState) =>
-  (1 + state.prestige * 0.15) * (1 + state.droneLevel * 0.10);
+  (1 + state.prestige * 0.15) *
+  (1 + state.droneLevel * 0.10) *
+  (1 + state.nanobotLevel * 0.15) *
+  (1 + state.singularityLevel * 0.30);
 
 export const scrapPerSecond = (state: GameState) =>
   (1 + state.scrapLevel * 0.75) *
   (1 + state.conveyorLevel * 0.05) *
   (1 + state.recyclerLevel * 0.10) *
+  (1 + state.dynamoLevel * 0.20) *
   multiplier(state);
 
 export const alloyPerSecond = (state: GameState) =>
   state.refineryLevel *
   0.08 *
   (1 + state.furnaceLevel * 0.15) *
+  (1 + state.arcFurnaceLevel * 0.25) *
   multiplier(state);
 
 export const corePerSecond = (state: GameState) =>
   state.coreSynthLevel *
   0.01 *
   (1 + state.resonatorLevel * 0.25) *
+  (1 + state.quantumLevel * 0.40) *
   multiplier(state);
 
 export const scrapUpgradeCost = (level: number) =>
@@ -74,6 +90,21 @@ export const resonatorCost = (level: number) =>
 
 export const droneCost = (level: number) =>
   Math.floor(100 * Math.pow(1.40, level));
+
+export const dynamoCost = (level: number) =>
+  Math.floor(4_000 * Math.pow(1.22, level));
+
+export const arcFurnaceCost = (level: number) =>
+  Math.floor(12_000 * Math.pow(1.26, level));
+
+export const quantumCost = (level: number) =>
+  Math.floor(350 * Math.pow(1.38, level));
+
+export const nanobotCost = (level: number) =>
+  Math.floor(1_000 * Math.pow(1.42, level));
+
+export const singularityCost = (level: number) =>
+  Math.floor(5_000 * Math.pow(1.50, level));
 
 export const prestigeCost = (state: GameState) =>
   Math.floor(5_000 * Math.pow(2.2, state.prestige));
