@@ -42,6 +42,9 @@ function format(value: number) {
 export default function App() {
   const [game, setGame] = useState<GameState>(loadGame);
 
+  const refineryUnlocked = game.scrap >= 100 || game.refineryLevel > 0;
+  const coreSynthUnlocked = game.alloy >= 500 || game.coreSynthLevel > 0;
+
   const rates = useMemo(
     () => ({
       scrap: scrapPerSecond(game),
@@ -76,7 +79,7 @@ export default function App() {
 
   function buyRefinery() {
     const cost = refineryCost(game.refineryLevel);
-    if (game.scrap < cost) return;
+    if (!refineryUnlocked || game.scrap < cost) return;
 
     setGame((current) => ({
       ...current,
@@ -87,7 +90,7 @@ export default function App() {
 
   function buyCoreSynth() {
     const cost = coreSynthCost(game.coreSynthLevel);
-    if (game.alloy < cost) return;
+    if (!coreSynthUnlocked || game.alloy < cost) return;
 
     setGame((current) => ({
       ...current,
@@ -143,18 +146,30 @@ export default function App() {
 
           <Upgrade
             title="Alloy Refinery"
-            subtitle={`Level ${game.refineryLevel} · +0.08 Alloy/s`}
+            subtitle={
+              refineryUnlocked
+                ? `Level ${game.refineryLevel} · +0.08 Alloy/s`
+                : "LOCKED · Reach 100 Scrap"
+            }
             cost={refineryCost(game.refineryLevel)}
-            disabled={game.scrap < refineryCost(game.refineryLevel)}
+            disabled={
+              !refineryUnlocked || game.scrap < refineryCost(game.refineryLevel)
+            }
             onClick={buyRefinery}
           />
 
           <Upgrade
             title="Neon Core Synthesizer"
-            subtitle={`Level ${game.coreSynthLevel} · +0.01 Core/s`}
+            subtitle={
+              coreSynthUnlocked
+                ? `Level ${game.coreSynthLevel} · +0.01 Core/s`
+                : "LOCKED · Reach 500 Alloy"
+            }
             cost={coreSynthCost(game.coreSynthLevel)}
             currency="Alloy"
-            disabled={game.alloy < coreSynthCost(game.coreSynthLevel)}
+            disabled={
+              !coreSynthUnlocked || game.alloy < coreSynthCost(game.coreSynthLevel)
+            }
             onClick={buyCoreSynth}
           />
         </article>
