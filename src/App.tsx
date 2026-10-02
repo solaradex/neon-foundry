@@ -3,10 +3,15 @@ import "./App.css";
 import {
   alloyPerSecond,
   applyIdleIncome,
+  conveyorCost,
   corePerSecond,
   coreSynthCost,
+  droneCost,
+  furnaceCost,
   initialState,
   prestigeCost,
+  recyclerCost,
+  resonatorCost,
   refineryCost,
   scrapPerSecond,
   scrapUpgradeCost,
@@ -22,14 +27,35 @@ function loadGame(): GameState {
 
     const saved = JSON.parse(raw);
 
-    return applyIdleIncome({
+    return {
       ...initialState,
       ...saved,
       coreSynthLevel: saved.coreSynthLevel ?? 0,
-    });
+      conveyorLevel: saved.conveyorLevel ?? 0,
+      recyclerLevel: saved.recyclerLevel ?? 0,
+      furnaceLevel: saved.furnaceLevel ?? 0,
+    };
   } catch {
     return initialState;
   }
+}
+
+function getOfflineSeconds(state: GameState, now = Date.now()) {
+  return Math.min(
+    Math.max(0, (now - state.lastSavedAt) / 1000),
+    8 * 60 * 60,
+  );
+}
+
+function formatDuration(seconds: number) {
+  const total = Math.max(0, Math.floor(seconds));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const secs = total % 60;
+
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  if (minutes > 0) return `${minutes}m ${secs}s`;
+  return `${secs}s`;
 }
 
 function format(value: number) {
@@ -41,6 +67,10 @@ function format(value: number) {
 
 export default function App() {
   const [game, setGame] = useState<GameState>(loadGame);
+  const [offlineSeconds] = useState(() => getOfflineSeconds(game));
+  const [showOfflineReport, setShowOfflineReport] = useState(
+    () => offlineSeconds >= 10,
+  );
 
   const refineryUnlocked = game.scrap >= 100 || game.refineryLevel > 0;
   const coreSynthUnlocked = game.alloy >= 500 || game.coreSynthLevel > 0;
@@ -88,6 +118,61 @@ export default function App() {
     }));
   }
 
+  function buyConveyor() {
+    const cost = conveyorCost(game.conveyorLevel);
+    if (game.scrap < cost) return;
+
+    setGame((current) => ({
+      ...current,
+      scrap: current.scrap - cost,
+      conveyorLevel: current.conveyorLevel + 1,
+    }));
+  }
+
+  function buyRecycler() {
+    const cost = recyclerCost(game.recyclerLevel);
+    if (game.scrap < cost) return;
+
+    setGame((current) => ({
+      ...current,
+      scrap: current.scrap - cost,
+      recyclerLevel: current.recyclerLevel + 1,
+    }));
+  }
+
+  function buyFurnace() {
+    const cost = furnaceCost(game.furnaceLevel);
+    if (game.alloy < cost) return;
+
+    setGame((current) => ({
+      ...current,
+      alloy: current.alloy - cost,
+      furnaceLevel: current.furnaceLevel + 1,
+    }));
+  }
+
+  function buyResonator() {
+    const cost = resonatorCost(game.resonatorLevel);
+    if (game.cores < cost) return;
+
+    setGame((current) => ({
+      ...current,
+      cores: current.cores - cost,
+      resonatorLevel: current.resonatorLevel + 1,
+    }));
+  }
+
+  function buyDrone() {
+    const cost = droneCost(game.droneLevel);
+    if (game.cores < cost) return;
+
+    setGame((current) => ({
+      ...current,
+      cores: current.cores - cost,
+      droneLevel: current.droneLevel + 1,
+    }));
+  }
+
   function buyCoreSynth() {
     const cost = coreSynthCost(game.coreSynthLevel);
     if (!coreSynthUnlocked || game.alloy < cost) return;
@@ -115,8 +200,40 @@ export default function App() {
     setGame(initialState);
   }
 
+  const offlineScrap = scrapPerSecond(game) * offlineSeconds;
+  const offlineAlloy = alloyPerSecond(game) * offlineSeconds;
+  const offlineCores = corePerSecond(game) * offlineSeconds;
+
   return (
     <main className="shell">
+      {showOfflineReport && (
+        <div className="offline-overlay">
+          <section className="offline-modal" role="dialog" aria-modal="true">
+            <p className="eyebrow">FACTORY STATUS REPORT</p>
+            <h2>WELCOME BACK</h2>
+            <p>Your factory operated for <strong>{formatDuration(offlineSeconds)}</strong> while you were away.</p>
+
+            <div className="offline-rewards">
+              <div>
+                <span>⚙ Scrap</span>
+                <strong>+{format(offlineScrap)}</strong>
+              </div>
+              <div>
+                <span>◈ Alloy</span>
+                <strong>+{format(offlineAlloy)}</strong>
+              </div>
+              <div>
+                <span>✦ Neon Cores</span>
+                <strong>+{format(offlineCores)}</strong>
+              </div>
+            </div>
+
+            <button onClick={() => setShowOfflineReport(false)}>
+              COLLECT REPORT
+            </button>
+          </section>
+        </div>
+      )}
       <header className="topbar">
         <div>
           <p className="eyebrow">AUTOMATED INDUSTRIAL SIMULATION</p>
@@ -145,6 +262,22 @@ export default function App() {
           />
 
           <Upgrade
+            title="Conveyor Optimization"
+            subtitle={`Level ${game.conveyorLevel} · +5% Scrap production`}
+            cost={conveyorCost(game.conveyorLevel)}
+            disabled={game.scrap < conveyorCost(game.conveyorLevel)}
+            onClick={buyConveyor}
+          />
+
+          <Upgrade
+            title="Magnetic Recycler"
+            subtitle={`Level ${game.recyclerLevel} · +10% Scrap production`}
+            cost={recyclerCost(game.recyclerLevel)}
+            disabled={game.scrap < recyclerCost(game.recyclerLevel)}
+            onClick={buyRecycler}
+          />
+
+          <Upgrade
             title="Alloy Refinery"
             subtitle={
               refineryUnlocked
@@ -156,6 +289,17 @@ export default function App() {
               !refineryUnlocked || game.scrap < refineryCost(game.refineryLevel)
             }
             onClick={buyRefinery}
+          />
+
+          <Upgrade
+            title="Plasma Furnace"
+            subtitle={`Level ${game.furnaceLevel} · +15% Alloy production`}
+            cost={furnaceCost(game.furnaceLevel)}
+            currency="Alloy"
+            disabled={
+              game.alloy < furnaceCost(game.furnaceLevel)
+            }
+            onClick={buyFurnace}
           />
 
           <Upgrade
@@ -171,6 +315,24 @@ export default function App() {
               !coreSynthUnlocked || game.alloy < coreSynthCost(game.coreSynthLevel)
             }
             onClick={buyCoreSynth}
+          />
+
+          <Upgrade
+            title="Core Resonator"
+            subtitle={`Level ${game.resonatorLevel} · +25% Neon Core production`}
+            cost={resonatorCost(game.resonatorLevel)}
+            currency="Neon Cores"
+            disabled={game.cores < resonatorCost(game.resonatorLevel)}
+            onClick={buyResonator}
+          />
+
+          <Upgrade
+            title="Drone Swarm"
+            subtitle={`Level ${game.droneLevel} · +10% all production`}
+            cost={droneCost(game.droneLevel)}
+            currency="Neon Cores"
+            disabled={game.cores < droneCost(game.droneLevel)}
+            onClick={buyDrone}
           />
         </article>
 
